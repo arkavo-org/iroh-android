@@ -1,0 +1,27 @@
+[package]
+name = "iroh-android-ffi"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+description = "JNI bindings for Iroh blob operations on Android"
+
+[lib]
+crate-type = ["cdylib"]
+name = "iroh_android"
+
+[dependencies]
+# Stack matches iroh-swift to guarantee wire interop between iOS and Android
+# (same blob ticket format, same protocol versions, same relay protocol).
+iroh = "0.98"
+iroh-blobs = { version = "0.100", features = ["fs-store"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+anyhow = "1"
+# JNI bridge. 0.21 is current stable as of 2026-05.
+jni = "0.21"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

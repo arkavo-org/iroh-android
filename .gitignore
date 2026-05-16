@@ -1,0 +1,17 @@
+# Rust
+rust/target/
+
+# Gradle / Android
+kotlin/.gradle/
+kotlin/build/
+kotlin/local.properties
+kotlin/library/build/
+kotlin/library/src/main/jniLibs/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store
