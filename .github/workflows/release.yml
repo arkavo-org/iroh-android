@@ -13,6 +13,10 @@ permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Build AAR & publish to GitHub Packages
@@ -23,12 +27,14 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Verify VERSION matches tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
-            tag="${{ github.event.inputs.tag }}"
-            tag="${tag#v}"
+          if [[ -n "$INPUT_TAG" ]]; then
+            tag="${INPUT_TAG#v}"
+          else
+            tag="${GITHUB_REF_NAME#v}"
           fi
           version="$(tr -d '[:space:]' < VERSION)"
           if [[ "$tag" != "$version" ]]; then
@@ -55,10 +61,14 @@ jobs:
           key: release
 
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.5"
 
       - name: Build AAR (cross-compiles Rust for 3 Android ABIs)
         run: ./scripts/build-aar.sh
@@ -82,11 +92,13 @@ jobs:
       - name: Attach AAR to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
-            tag="${{ github.event.inputs.tag }}"
+          if [[ -n "$INPUT_TAG" ]]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$GITHUB_REF_NAME"
           fi
           AAR=kotlin/library/build/outputs/aar/iroh-android-release.aar
           if ! gh release view "$tag" >/dev/null 2>&1; then
