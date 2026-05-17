@@ -1649,6 +1649,7 @@ dependencies = [
  "iroh",
  "iroh-blobs",
  "jni 0.21.1",
+ "ndk-context",
  "tokio",
 ]
 

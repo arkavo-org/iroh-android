@@ -13,6 +13,9 @@ use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::sys::{jbyteArray, jlong, jstring};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 const EXC_NODE_UNAVAILABLE: &str = "net/arkavo/iroh/IrohException$NodeUnavailable";
 const EXC_PUBLISH_FAILED: &str = "net/arkavo/iroh/IrohException$PublishFailed";
@@ -38,6 +41,56 @@ fn handle_to_node<'a>(handle: jlong) -> Option<&'a IrohNode> {
     // not freed until nativeDestroy. Kotlin enforces single-threaded close
     // semantics on IrohNode.
     unsafe { (handle as *const IrohNode).as_ref() }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_net_arkavo_iroh_IrohNative_initContext<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    context: JObject<'local>,
+) {
+    // ndk-context's initialize_android_context is once-only — a second
+    // successful call would leak another JNI global ref and overwrite the
+    // previous VM/Context registration. CAS so concurrent callers race-safely
+    // no-op; on failure we reset so the consumer can retry.
+    if CONTEXT_INITIALIZED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+
+    let result = catch_unwind(AssertUnwindSafe(|| -> anyhow::Result<()> {
+        let vm = env
+            .get_java_vm()
+            .map_err(|e| anyhow::anyhow!("get_java_vm: {e}"))?;
+        let global = env
+            .new_global_ref(&context)
+            .map_err(|e| anyhow::anyhow!("new_global_ref(context): {e}"))?;
+        // ndk-context expects a raw pointer to a JNI global ref that lives
+        // for the process lifetime. Leak the GlobalRef so it isn't dropped.
+        let raw_context = global.as_raw();
+        std::mem::forget(global);
+        unsafe {
+            ndk_context::initialize_android_context(
+                vm.get_java_vm_pointer() as *mut std::ffi::c_void,
+                raw_context as *mut std::ffi::c_void,
+            );
+        }
+        Ok(())
+    }));
+
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            CONTEXT_INITIALIZED.store(false, Ordering::Release);
+            throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, &format!("{e:#}"));
+        }
+        Err(_) => {
+            CONTEXT_INITIALIZED.store(false, Ordering::Release);
+            throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, "panic in initContext");
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
