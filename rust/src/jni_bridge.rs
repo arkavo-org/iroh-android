@@ -13,6 +13,9 @@ use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::sys::{jbyteArray, jlong, jstring};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 const EXC_NODE_UNAVAILABLE: &str = "net/arkavo/iroh/IrohException$NodeUnavailable";
 const EXC_PUBLISH_FAILED: &str = "net/arkavo/iroh/IrohException$PublishFailed";
@@ -46,6 +49,17 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_initContext<'local>(
     _class: JClass<'local>,
     context: JObject<'local>,
 ) {
+    // ndk-context's initialize_android_context is once-only — a second
+    // successful call would leak another JNI global ref and overwrite the
+    // previous VM/Context registration. CAS so concurrent callers race-safely
+    // no-op; on failure we reset so the consumer can retry.
+    if CONTEXT_INITIALIZED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+
     let result = catch_unwind(AssertUnwindSafe(|| -> anyhow::Result<()> {
         let vm = env
             .get_java_vm()
@@ -68,8 +82,14 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_initContext<'local>(
 
     match result {
         Ok(Ok(())) => {}
-        Ok(Err(e)) => throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, &format!("{e:#}")),
-        Err(_) => throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, "panic in initContext"),
+        Ok(Err(e)) => {
+            CONTEXT_INITIALIZED.store(false, Ordering::Release);
+            throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, &format!("{e:#}"));
+        }
+        Err(_) => {
+            CONTEXT_INITIALIZED.store(false, Ordering::Release);
+            throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, "panic in initContext");
+        }
     }
 }
 
