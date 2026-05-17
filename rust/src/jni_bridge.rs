@@ -62,11 +62,7 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_create(
                     .into(),
             )
         };
-        let node = IrohNode::new(
-            storage_path.into(),
-            relay_enabled != 0,
-            custom_relay,
-        )?;
+        let node = IrohNode::new(storage_path.into(), relay_enabled != 0, custom_relay)?;
         let boxed = Box::new(node);
         Ok(Box::into_raw(boxed) as jlong)
     }));
@@ -109,7 +105,11 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_nodeId<'local>(
     let node = match handle_to_node(handle) {
         Some(n) => n,
         None => {
-            throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, "node handle is 0 / already destroyed");
+            throw_iroh(
+                &mut env,
+                EXC_NODE_UNAVAILABLE,
+                "node handle is 0 / already destroyed",
+            );
             return JObject::null().into_raw() as jstring;
         }
     };
@@ -132,7 +132,11 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_put<'local>(
     let node = match handle_to_node(handle) {
         Some(n) => n,
         None => {
-            throw_iroh(&mut env, EXC_PUBLISH_FAILED, "node handle is 0 / already destroyed");
+            throw_iroh(
+                &mut env,
+                EXC_PUBLISH_FAILED,
+                "node handle is 0 / already destroyed",
+            );
             return JObject::null().into_raw() as jstring;
         }
     };
@@ -173,7 +177,11 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_get<'local>(
     let node = match handle_to_node(handle) {
         Some(n) => n,
         None => {
-            throw_iroh(&mut env, EXC_FETCH_FAILED, "node handle is 0 / already destroyed");
+            throw_iroh(
+                &mut env,
+                EXC_FETCH_FAILED,
+                "node handle is 0 / already destroyed",
+            );
             return JObject::null().into_raw() as jbyteArray;
         }
     };
@@ -190,7 +198,11 @@ pub extern "system" fn Java_net_arkavo_iroh_IrohNative_get<'local>(
         Ok(Ok(bytes)) => match env.byte_array_from_slice(&bytes) {
             Ok(arr) => arr.into_raw(),
             Err(e) => {
-                throw_iroh(&mut env, EXC_FETCH_FAILED, &format!("byte_array_from_slice: {e}"));
+                throw_iroh(
+                    &mut env,
+                    EXC_FETCH_FAILED,
+                    &format!("byte_array_from_slice: {e}"),
+                );
                 JObject::null().into_raw() as jbyteArray
             }
         },

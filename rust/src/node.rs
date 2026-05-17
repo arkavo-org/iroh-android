@@ -5,8 +5,8 @@
 //! shape of `iroh-swift/rust/src/node.rs` so wire interop is one-to-one.
 
 use anyhow::{Context, Result};
-use iroh::endpoint::presets;
 use iroh::endpoint::RelayMode;
+use iroh::endpoint::presets;
 use iroh::{Endpoint, RelayMap, RelayUrl, protocol::Router};
 use iroh_blobs::{ALPN as BLOBS_ALPN, BlobsProtocol, store::fs::FsStore, ticket::BlobTicket};
 use std::path::PathBuf;

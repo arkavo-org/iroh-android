@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.1.0). Must already exist."
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    name: Build AAR & publish to GitHub Packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Verify VERSION matches tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+            tag="${tag#v}"
+          fi
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$tag" != "$version" ]]; then
+            echo "tag ($tag) does not match VERSION file ($version)" >&2
+            exit 1
+          fi
+          echo "publishing version $version"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Rust + Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          key: release
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build AAR (cross-compiles Rust for 3 Android ABIs)
+        run: ./scripts/build-aar.sh
+
+      - name: Verify .so files present in AAR
+        run: |
+          set -euo pipefail
+          AAR=kotlin/library/build/outputs/aar/iroh-android-release.aar
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -l "$AAR" | grep -q "jni/$abi/libiroh_android.so" \
+              || { echo "missing libiroh_android.so for $abi"; exit 1; }
+          done
+
+      - name: Publish to GitHub Packages
+        working-directory: kotlin
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gradle :iroh-android:publishReleasePublicationToGitHubPackagesRepository --no-daemon
+
+      - name: Attach AAR to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+          fi
+          AAR=kotlin/library/build/outputs/aar/iroh-android-release.aar
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --generate-notes
+          fi
+          gh release upload "$tag" "$AAR" --clobber

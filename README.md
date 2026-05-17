@@ -44,10 +44,53 @@ The script auto-detects NDK in this order:
 2. `$ANDROID_HOME/ndk/<latest>`
 3. `$HOME/Library/Android/sdk/ndk/<latest>`
 
-## Consuming in closurekb/android
+## Consuming via GitHub Packages
 
-Either reference the prebuilt AAR via flatDir, or include the Gradle project
-as a composite build. See `closurekb/android/app/src/main/java/com/closurekb/data/iroh/README.md`.
+Tagged releases are published to GitHub Packages by `.github/workflows/release.yml`.
+The published AAR bundles `libiroh_android.so` for `arm64-v8a`, `armeabi-v7a`,
+and `x86_64`.
+
+In the consumer's `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            name = "GitHubPackagesIrohAndroid"
+            url = uri("https://maven.pkg.github.com/arkavo-org/iroh-android")
+            credentials {
+                username = providers.gradleProperty("gpr.user").orNull
+                    ?: System.getenv("GITHUB_ACTOR")
+                password = providers.gradleProperty("gpr.token").orNull
+                    ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}
+```
+
+In the consumer's version catalog:
+
+```toml
+iroh-android = { module = "net.arkavo:iroh-android", version = "0.1.0" }
+```
+
+GitHub Packages requires authentication even for public packages. Local
+developers need a personal access token with `read:packages` scope, exposed
+as `GITHUB_TOKEN` (or set `gpr.user` / `gpr.token` in `~/.gradle/gradle.properties`).
+CI uses the workflow's built-in `GITHUB_TOKEN`.
+
+For local iteration across both repos, you can still composite-include this
+project in the consumer's `settings.gradle.kts` to shadow the published artifact.
+
+## Releasing
+
+1. Bump `VERSION` (root) and `rust/Cargo.toml` `package.version`.
+2. Commit, then tag: `git tag v0.1.1 && git push --tags`.
+3. The `Release` workflow cross-compiles the Rust cdylib, assembles the AAR,
+   publishes to GitHub Packages, and attaches the AAR to the GitHub Release.
 
 ## License
 
