@@ -11,6 +11,8 @@ internal object IrohNative {
         System.loadLibrary("iroh_android")
     }
 
+    @JvmStatic external fun initContext(context: android.content.Context)
+
     @JvmStatic external fun create(
         storagePath: String,
         relayEnabled: Boolean,

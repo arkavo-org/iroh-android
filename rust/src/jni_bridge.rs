@@ -41,6 +41,39 @@ fn handle_to_node<'a>(handle: jlong) -> Option<&'a IrohNode> {
 }
 
 #[unsafe(no_mangle)]
+pub extern "system" fn Java_net_arkavo_iroh_IrohNative_initContext<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    context: JObject<'local>,
+) {
+    let result = catch_unwind(AssertUnwindSafe(|| -> anyhow::Result<()> {
+        let vm = env
+            .get_java_vm()
+            .map_err(|e| anyhow::anyhow!("get_java_vm: {e}"))?;
+        let global = env
+            .new_global_ref(&context)
+            .map_err(|e| anyhow::anyhow!("new_global_ref(context): {e}"))?;
+        // ndk-context expects a raw pointer to a JNI global ref that lives
+        // for the process lifetime. Leak the GlobalRef so it isn't dropped.
+        let raw_context = global.as_raw();
+        std::mem::forget(global);
+        unsafe {
+            ndk_context::initialize_android_context(
+                vm.get_java_vm_pointer() as *mut std::ffi::c_void,
+                raw_context as *mut std::ffi::c_void,
+            );
+        }
+        Ok(())
+    }));
+
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, &format!("{e:#}")),
+        Err(_) => throw_iroh(&mut env, EXC_NODE_UNAVAILABLE, "panic in initContext"),
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_net_arkavo_iroh_IrohNative_create(
     mut env: JNIEnv,
     _class: JClass,

@@ -18,6 +18,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 anyhow = "1"
 # JNI bridge. 0.21 is current stable as of 2026-05.
 jni = "0.21"
+# Used by iroh transitively for Android networking; must be initialized
+# with the JavaVM + a Context global ref before any iroh call.
+ndk-context = "0.1"
 
 [profile.release]
 opt-level = "z"
