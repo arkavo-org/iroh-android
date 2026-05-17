@@ -68,6 +68,37 @@ publishing {
             afterEvaluate {
                 from(components["release"])
             }
+            pom {
+                name.set("iroh-android")
+                description.set("Kotlin/JNI bindings for Iroh blob storage on Android")
+                url.set("https://github.com/arkavo-org/iroh-android")
+                licenses {
+                    license {
+                        name.set("MIT")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                    license {
+                        name.set("Apache-2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/arkavo-org/iroh-android")
+                    connection.set("scm:git:https://github.com/arkavo-org/iroh-android.git")
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/arkavo-org/iroh-android")
+            credentials {
+                username = (findProperty("gpr.user") as String?)
+                    ?: System.getenv("GITHUB_ACTOR")
+                password = (findProperty("gpr.token") as String?)
+                    ?: System.getenv("GITHUB_TOKEN")
+            }
         }
     }
 }
